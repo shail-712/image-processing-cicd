@@ -66,3 +66,20 @@ jobs:
         run: |
           IMG_ENCODED=$(printf '%s' "$IMAGE" | jq -sRr @uri)
           curl --fail-with-body -sS -X POST "${RENDER_DEPLOY_HOOK}&imgURL=${IMG_ENCODED}"
+
+      - name: Verify deployment (health check with retries)
+        env:
+          HEALTH_URL: https://image-processing-service-wob4.onrender.com/health
+        run: |
+          echo "Waiting 30s for Render to start the new deploy..."
+          sleep 30
+          for i in $(seq 1 20); do
+            echo "Attempt $i/20"
+            if curl --fail --silent --show-error --max-time 30 "$HEALTH_URL" | grep -q '"status":"healthy"'; then
+              echo "Deployment verified: /health is healthy"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Health check failed after 20 attempts"
+          exit 1
