@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,6 +30,7 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -50,3 +52,17 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/image-processing-service:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/image-processing-service:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Render deploy (SHA-tagged image)
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          IMAGE: docker.io/shail712/image-processing-service:${{ github.sha }}
+        run: |
+          IMG_ENCODED=$(printf '%s' "$IMAGE" | jq -sRr @uri)
+          curl --fail-with-body -sS -X POST "${RENDER_DEPLOY_HOOK}&imgURL=${IMG_ENCODED}"
