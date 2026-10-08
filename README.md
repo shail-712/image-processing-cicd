@@ -39,6 +39,139 @@ Converts an image to grayscale.
 curl -X POST -F "image=@your_image.jpg" http://localhost:5000/grayscale --output grayscale.jpg
 ```
 
+## Usage Examples
+
+All examples below are ready to copy and run. Run the image examples from a folder that contains a test image (see "Create test images").
+
+### Run the tests
+
+```powershell
+pip install -r requirements.txt
+pytest
+```
+
+### Run locally with Docker
+
+```powershell
+docker build -t image-processing-local .
+docker run --rm -p 5000:5000 image-processing-local
+```
+
+Leave that window open and use a second terminal for the commands below. Stop the container with `Ctrl+C`.
+
+### Choose which server to call
+
+The same commands work against a local container or the deployed service. Set the base URL once per terminal session.
+
+```powershell
+# Local container
+$BASE = "http://localhost:5000"
+
+# Deployed service on Render
+$BASE = "https://image-processing-service-wob4.onrender.com"
+```
+
+The Render free tier spins down when idle, so the first request after a pause can take up to a minute.
+
+### Create test images
+
+```powershell
+python -c "from PIL import Image; Image.new('RGB',(400,300),'red').save('test.jpg')"
+python -c "from PIL import Image; Image.new('RGBA',(400,300),(255,0,0,128)).save('test.png')"
+```
+
+`test.png` has transparency, which is useful for testing PNG to JPEG conversion.
+
+### API calls (Windows PowerShell)
+
+Use `curl.exe`, not `curl`. In PowerShell, plain `curl` is an alias for `Invoke-WebRequest` and does not accept these options. Each command prints the HTTP status and saves the result to a file.
+
+**Health check**
+
+```powershell
+curl.exe $BASE/health
+```
+
+**Resize** (`image`, `width`, `height`)
+
+```powershell
+curl.exe -s -o resized.jpg -w "HTTP status: %{http_code}`n" -X POST -F "image=@test.jpg" -F "width=200" -F "height=200" $BASE/resize
+```
+
+**Compress** (`image`, `quality` 1-100, `format`)
+
+```powershell
+curl.exe -s -o compressed.jpg -w "HTTP status: %{http_code}`n" -X POST -F "image=@test.jpg" -F "quality=50" -F "format=jpeg" $BASE/compress
+```
+
+**Convert** (`image`, `format` of jpeg, png or webp)
+
+```powershell
+curl.exe -s -o converted.webp -w "HTTP status: %{http_code}`n" -X POST -F "image=@test.jpg" -F "format=webp" $BASE/convert
+curl.exe -s -o from_png.jpg -w "HTTP status: %{http_code}`n" -X POST -F "image=@test.png" -F "format=jpeg" $BASE/convert
+```
+
+**Grayscale** (`image`)
+
+```powershell
+curl.exe -s -o grayscale.jpg -w "HTTP status: %{http_code}`n" -X POST -F "image=@test.jpg" $BASE/grayscale
+```
+
+### Check the results
+
+```powershell
+python -c "from PIL import Image; [print(f, Image.open(f).size, Image.open(f).format, Image.open(f).mode) for f in ['test.jpg','resized.jpg','compressed.jpg','converted.webp','grayscale.jpg','from_png.jpg']]"
+```
+
+Expected output:
+
+| File | Size | Format | Mode |
+|---|---|---|---|
+| `resized.jpg` | 200x200 | JPEG | RGB |
+| `compressed.jpg` | 400x300 | JPEG | RGB |
+| `converted.webp` | 400x300 | WEBP | RGB |
+| `grayscale.jpg` | 400x300 | JPEG | L |
+| `from_png.jpg` | 400x300 | JPEG | RGB |
+
+### Error handling examples
+
+Invalid requests return a JSON error with HTTP status 400.
+
+```powershell
+# No image provided
+curl.exe -i -X POST $BASE/resize
+
+# Width is not an integer
+curl.exe -i -X POST -F "image=@test.jpg" -F "width=abc" -F "height=200" $BASE/resize
+```
+
+Expected responses:
+
+```json
+{"error":"No image file provided in 'image' field"}
+{"error":"width and height must be valid integers"}
+```
+
+Uploads larger than 5 MB are rejected with a JSON error as well.
+
+### Bash (Linux and macOS)
+
+```bash
+BASE=http://localhost:5000
+
+curl $BASE/health
+curl -s -o resized.jpg -w "HTTP status: %{http_code}\n" -X POST -F "image=@test.jpg" -F "width=200" -F "height=200" $BASE/resize
+curl -s -o compressed.jpg -w "HTTP status: %{http_code}\n" -X POST -F "image=@test.jpg" -F "quality=50" -F "format=jpeg" $BASE/compress
+curl -s -o converted.webp -w "HTTP status: %{http_code}\n" -X POST -F "image=@test.jpg" -F "format=webp" $BASE/convert
+curl -s -o grayscale.jpg -w "HTTP status: %{http_code}\n" -X POST -F "image=@test.jpg" $BASE/grayscale
+```
+
+### Notes
+
+- Run these from a folder outside the repository, or delete the generated images afterwards, so test files are not committed by accident.
+- Do not combine `-i` with `-o`. The response headers would be written into the image file and corrupt it.
+- Use `https://` for the Render URL. A plain `http://` request is redirected and curl does not follow the redirect by default.
+
 ## CI/CD Pipeline
 
 Every push to GitHub is automatically tested. Every push to `main` that passes is built into a Docker image, published to Docker Hub, deployed to Render, and verified with a live health check. No manual step exists between `git push` and the running service.

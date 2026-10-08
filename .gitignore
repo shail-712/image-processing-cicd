@@ -13,7 +13,7 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
-
+testImg.jpg
 # Environment files
 .env
 
